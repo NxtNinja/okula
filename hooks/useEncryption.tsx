@@ -2,10 +2,6 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { deriveKey, generateEncryptionKey } from '@/lib/encryption';
 
-interface EncryptionKey {
-  conversationId: string;
-  key: string;
-}
 
 /**
  * Hook for managing encryption keys securely on the client side

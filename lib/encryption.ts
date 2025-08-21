@@ -162,7 +162,7 @@ export const decryptXorMessage = (encryptedMessage: string, key: string): string
     // Try standard AES decryption as fallback
     try {
       return decryptMessage(encryptedMessage, key);
-    } catch (aesError) {
+    } catch {
       // Return the original message if decryption fails
       console.error('All decryption methods failed, returning original');
       return encryptedMessage;
