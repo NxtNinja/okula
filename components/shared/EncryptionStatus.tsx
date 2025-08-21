@@ -1,11 +1,14 @@
-import { Shield, ShieldOff } from "lucide-react";
+import { Shield } from "lucide-react";
 
 interface EncryptionStatusProps {
   isEncrypted: boolean;
   showDetails?: boolean;
 }
 
-export const EncryptionStatus = ({ isEncrypted, showDetails = false }: EncryptionStatusProps) => {
+export const EncryptionStatus = ({
+  isEncrypted,
+  showDetails = false,
+}: EncryptionStatusProps) => {
   if (!showDetails || !isEncrypted) {
     return null;
   }
