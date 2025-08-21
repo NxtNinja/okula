@@ -37,6 +37,7 @@ export default defineSchema({
     memberId: v.id("users"),
     conversationId: v.id("conversations"),
     lastSeenMessage: v.optional(v.id("messages")),
+    keyHash: v.optional(v.string()),
   })
     .index("by_memberId", ["memberId"])
     .index("by_conversationId", ["conversationId"])
@@ -47,5 +48,7 @@ export default defineSchema({
     sender: v.id("users"),
     type: v.string(),
     content: v.array(v.string()),
+    isEncrypted: v.optional(v.boolean()),
+    encryptionVersion: v.optional(v.string()),
   }).index("by_conversationId", ["conversationId"]),
 });

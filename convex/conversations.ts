@@ -3,6 +3,7 @@ import { query } from "./_generated/server";
 import { getUserByClerkId } from "./_utils";
 import { Id } from "./_generated/dataModel";
 import { QueryCtx, MutationCtx } from "./_generated/server";
+import { generateServerEncryptionKey, serverDecryptMessage } from "./_utils/encryption";
 
 export const get = query({
   args: {},
@@ -51,6 +52,8 @@ export const get = query({
         const lastMessage = await getLastMessageDetails({
           ctx,
           id: conversation.lastMessageId as Id<"messages">,
+          conversationId: conversation._id,
+          memberIds: allConversationMemberships.map(m => m.memberId),
         });
 
         const lastSeenMessage = conversationMemberships[index].lastSeenMessage
@@ -97,10 +100,11 @@ export const get = query({
   },
 });
 
-const getMessageContent = (type: string, content: string) => {
+const getMessageContent = (type: string, content: string[]) => {
   switch (type) {
     case "text":
-      return content;
+      // Return the first content item (messages are stored as arrays)
+      return content[0] || "";
     default:
       return "[Non-text]";
   }
@@ -109,9 +113,13 @@ const getMessageContent = (type: string, content: string) => {
 const getLastMessageDetails = async ({
   ctx,
   id,
+  conversationId,
+  memberIds,
 }: {
   ctx: QueryCtx | MutationCtx;
   id: Id<"messages">;
+  conversationId: Id<"conversations">;
+  memberIds: Id<"users">[];
 }) => {
   if (!id) {
     return null;
@@ -129,10 +137,27 @@ const getLastMessageDetails = async ({
     return null;
   }
 
-  const content = getMessageContent(
-    message.type,
-    message.content as unknown as string
-  );
+  let content: string;
+  
+  // Check if message is encrypted and decrypt if needed
+  if (message.isEncrypted && message.content && message.content.length > 0) {
+    try {
+      // Generate the same encryption key used during encryption
+      const encryptionKey = generateServerEncryptionKey(conversationId, memberIds);
+      
+      // Get the encrypted content
+      const encryptedContent = getMessageContent(message.type, message.content);
+      
+      // Decrypt the message
+      content = serverDecryptMessage(encryptedContent, encryptionKey);
+    } catch (error) {
+      console.error('Failed to decrypt message:', error);
+      content = "[Encrypted message]";
+    }
+  } else {
+    // Unencrypted message
+    content = getMessageContent(message.type, message.content);
+  }
 
   return {
     content,

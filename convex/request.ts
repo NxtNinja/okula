@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
 import { getUserByClerkId } from "./_utils";
+import { generateServerEncryptionKey, serverHashKey } from "./_utils/encryption";
 
 export const create = mutation({
   args: {
@@ -149,13 +150,23 @@ export const accept = mutation({
       conversationId,
     });
 
+    // Generate encryption key for this conversation
+    const members = [currentUser._id, request.sender];
+    const encryptionKey = generateServerEncryptionKey(
+      conversationId,
+      members
+    );
+    const keyHash = serverHashKey(encryptionKey);
+
     await ctx.db.insert("conversationMembers", {
       memberId: currentUser._id,
       conversationId,
+      keyHash: keyHash,
     });
     await ctx.db.insert("conversationMembers", {
       memberId: request.sender,
       conversationId,
+      keyHash: keyHash,
     });
 
     await ctx.db.delete(request._id);

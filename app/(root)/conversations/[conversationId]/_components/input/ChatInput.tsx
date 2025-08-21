@@ -40,6 +40,7 @@ const ChatInput = () => {
   });
 
   const onSubmit = async (data: z.infer<typeof chatMessageSchema>) => {
+    // Note: Encryption now happens server-side in the mutation
     await createMessage({
       conversationId,
       content: [data.content],

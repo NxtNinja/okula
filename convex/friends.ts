@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getUserByClerkId } from "./_utils";
+import { generateServerEncryptionKey, serverHashKey } from "./_utils/encryption";
 
 export const get = query({
   args: {},
@@ -77,11 +78,20 @@ export const createGroup = mutation({
       name: args.name,
     });
 
+    // Generate encryption key for this conversation
+    const allMembers = [...args.members, currentUser._id];
+    const encryptionKey = generateServerEncryptionKey(
+      conversationId,
+      allMembers
+    );
+    const keyHash = serverHashKey(encryptionKey);
+
     await Promise.all(
-      [...args.members, currentUser._id].map(async (member) => {
+      allMembers.map(async (member) => {
         await ctx.db.insert("conversationMembers", {
           memberId: member,
           conversationId,
+          keyHash: keyHash,
         });
       })
     );

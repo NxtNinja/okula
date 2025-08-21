@@ -52,6 +52,8 @@ export const get = query({
           senderImage: messageSender.imageUrl,
           senderName: messageSender.username,
           isCurrentUser: messageSender._id === currentUser._id,
+          isEncrypted: message.isEncrypted || false,
+          encryptionVersion: message.encryptionVersion,
         };
       })
     );

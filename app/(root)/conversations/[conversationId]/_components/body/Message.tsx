@@ -2,6 +2,7 @@ import React, { ReactNode, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { EncryptionStatus } from "@/components/shared/EncryptionStatus";
 
 type Props = {
   fromCurrentUser: boolean;
@@ -12,6 +13,7 @@ type Props = {
   createdAt: number;
   seen?: ReactNode;
   type: string;
+  isEncrypted?: boolean;
 };
 
 const Message = ({
@@ -23,6 +25,7 @@ const Message = ({
   createdAt,
   seen,
   type,
+  isEncrypted = false,
 }: Props) => {
   const formatTime = (timestamp: number) => {
     return format(timestamp, "HH:mm");
@@ -63,14 +66,15 @@ const Message = ({
               {content}
             </p>
           ) : null}
-          <p
-            className={cn("text-xs flex w-full my-1", {
+          <div
+            className={cn("text-xs flex items-center gap-2 w-full my-1", {
               "text-primary-foreground justify-end": fromCurrentUser,
               "text-secondary-foreground justify-start": !fromCurrentUser,
             })}
           >
-            {formatTime(createdAt)}
-          </p>
+            <span>{formatTime(createdAt)}</span>
+            <EncryptionStatus isEncrypted={isEncrypted} showDetails={true} />
+          </div>
         </div>
         {seen}
       </div>
