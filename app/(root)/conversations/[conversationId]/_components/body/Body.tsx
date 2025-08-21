@@ -13,8 +13,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useSessionEncryption } from "@/hooks/useEncryption";
-import { decryptXorMessageArray, generateConversationKey } from "@/lib/encryption";
+import {
+  decryptXorMessageArray,
+  generateConversationKey,
+} from "@/lib/encryption";
 
 type Props = {
   members: {
@@ -27,15 +29,17 @@ type Props = {
 const Body = ({ members }: Props) => {
   const { conversationId } = useConversations();
   const bodyRef = useRef<HTMLDivElement>(null);
-  const { getOrCreateKey } = useSessionEncryption();
 
   const messages = useQuery(api.messages.get, {
     id: conversationId as Id<"conversations">,
   });
-  
-  const encryptionInfo = useQuery(api.encryption.getConversationEncryptionInfo, {
-    conversationId: conversationId as Id<"conversations">,
-  });
+
+  const encryptionInfo = useQuery(
+    api.encryption.getConversationEncryptionInfo,
+    {
+      conversationId: conversationId as Id<"conversations">,
+    }
+  );
 
   const { mutate: markRead } = useMutationState(api.conversation.markRead);
 
@@ -45,16 +49,26 @@ const Body = ({ members }: Props) => {
 
     try {
       // Generate the same key as the server using member IDs
-      const encryptionKey = generateConversationKey(conversationId, encryptionInfo.memberIds);
-      
+      const encryptionKey = generateConversationKey(
+        conversationId,
+        encryptionInfo.memberIds
+      );
+
       return messages.map((msg) => {
         // Only decrypt if message is marked as encrypted
-        if (msg.isEncrypted && msg.message.content && msg.message.content.length > 0) {
+        if (
+          msg.isEncrypted &&
+          msg.message.content &&
+          msg.message.content.length > 0
+        ) {
           try {
             // Check if content looks encrypted (contains colon separator)
             const firstContent = msg.message.content[0];
-            if (firstContent && firstContent.includes(':')) {
-              const decryptedContent = decryptXorMessageArray(msg.message.content, encryptionKey);
+            if (firstContent && firstContent.includes(":")) {
+              const decryptedContent = decryptXorMessageArray(
+                msg.message.content,
+                encryptionKey
+              );
               return {
                 ...msg,
                 message: {
@@ -64,11 +78,13 @@ const Body = ({ members }: Props) => {
               };
             } else {
               // Message marked as encrypted but doesn't have proper format
-              console.warn('Message marked as encrypted but has invalid format');
+              console.warn(
+                "Message marked as encrypted but has invalid format"
+              );
               return msg;
             }
           } catch (error) {
-            console.error('Failed to decrypt message:', error);
+            console.error("Failed to decrypt message:", error);
             // Return original message if decryption fails
             return msg;
           }
@@ -77,7 +93,7 @@ const Body = ({ members }: Props) => {
         return msg;
       });
     } catch (error) {
-      console.error('Failed to get encryption key:', error);
+      console.error("Failed to get encryption key:", error);
       return messages;
     }
   }, [messages, conversationId, encryptionInfo]);
@@ -126,7 +142,6 @@ const Body = ({ members }: Props) => {
     return formatSeenBy(seenMembers);
   };
 
-
   // Mark messages as read when component mounts or when new messages arrive
   useEffect(() => {
     if (decryptedMessages && decryptedMessages.length > 0) {
@@ -142,7 +157,11 @@ const Body = ({ members }: Props) => {
   // Also mark as read when the component becomes visible (user switches back to tab)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden && decryptedMessages && decryptedMessages.length > 0) {
+      if (
+        !document.hidden &&
+        decryptedMessages &&
+        decryptedMessages.length > 0
+      ) {
         markRead({
           conversationId,
           messageId: decryptedMessages[0].message._id,
@@ -150,8 +169,9 @@ const Body = ({ members }: Props) => {
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [decryptedMessages, conversationId, markRead]);
 
   useEffect(() => {
