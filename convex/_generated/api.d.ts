@@ -14,10 +14,12 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as _utils_encryption from "../_utils/encryption.js";
+import type * as _utils_encryptionCache from "../_utils/encryptionCache.js";
 import type * as _utils from "../_utils.js";
 import type * as conversation from "../conversation.js";
 import type * as conversations from "../conversations.js";
 import type * as encryption from "../encryption.js";
+import type * as fastMessage from "../fastMessage.js";
 import type * as friend from "../friend.js";
 import type * as friends from "../friends.js";
 import type * as http from "../http.js";
@@ -38,10 +40,12 @@ import type * as users from "../users.js";
  */
 declare const fullApi: ApiFromModules<{
   "_utils/encryption": typeof _utils_encryption;
+  "_utils/encryptionCache": typeof _utils_encryptionCache;
   _utils: typeof _utils;
   conversation: typeof conversation;
   conversations: typeof conversations;
   encryption: typeof encryption;
+  fastMessage: typeof fastMessage;
   friend: typeof friend;
   friends: typeof friends;
   http: typeof http;

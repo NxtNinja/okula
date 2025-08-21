@@ -29,7 +29,7 @@ const ChatInput = () => {
   const { conversationId } = useConversations();
 
   const { mutate: createMessage, pending } = useMutationState(
-    api.message.create
+    api.fastMessage.createFast
   );
 
   const form = useForm<z.infer<typeof chatMessageSchema>>({

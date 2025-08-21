@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { getUserByClerkId } from "./_utils";
-import { generateServerEncryptionKey, serverEncryptMessageArray, serverHashKey } from "./_utils/encryption";
+import { generateServerEncryptionKey, serverEncryptMessageArray } from "./_utils/encryption";
 
 export const create = mutation({
   args: {
@@ -10,21 +10,21 @@ export const create = mutation({
     content: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const indentity = await ctx.auth.getUserIdentity();
-
-    if (!indentity) {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
       throw new Error("Unauthorized");
     }
 
     const currentUser = await getUserByClerkId({
       ctx,
-      clerkId: indentity.subject,
+      clerkId: identity.subject,
     });
 
     if (!currentUser) {
       throw new ConvexError("User not found");
     }
 
+    // Single query to verify membership - no need to fetch all members
     const membership = await ctx.db
       .query("conversationMembers")
       .withIndex("by_memberId_conversationId", (q) =>
@@ -38,48 +38,40 @@ export const create = mutation({
       throw new ConvexError("You are not a member of this conversation");
     }
 
-    // Get all conversation members to generate encryption key
+    // Get members for encryption key - optimized query
     const members = await ctx.db
       .query("conversationMembers")
       .withIndex("by_conversationId", (q) =>
         q.eq("conversationId", args.conversationId)
       )
       .collect();
-
+    
     const memberIds = members.map(m => m.memberId);
     
-    // Generate encryption key based on conversation and members
+    // Generate encryption key
     const encryptionKey = generateServerEncryptionKey(
       args.conversationId,
       memberIds
     );
     
-    // Encrypt the message content
+    // Encrypt content with fast encryption
     const encryptedContent = serverEncryptMessageArray(args.content, encryptionKey);
     
-    // Store encrypted message
-    const message = await ctx.db.insert("messages", {
+    // Insert encrypted message
+    const messageId = await ctx.db.insert("messages", {
       sender: currentUser._id,
       conversationId: args.conversationId,
       type: args.type,
       content: encryptedContent,
       isEncrypted: true,
-      encryptionVersion: "v1",
+      encryptionVersion: "v2-fast",
     });
 
     // Update conversation's last message
     await ctx.db.patch(args.conversationId, {
-      lastMessageId: message,
+      lastMessageId: messageId,
     });
-    
-    // Update member's key hash if not already set
-    const keyHash = serverHashKey(encryptionKey);
-    if (!membership.keyHash || membership.keyHash !== keyHash) {
-      await ctx.db.patch(membership._id, {
-        keyHash: keyHash,
-      });
-    }
 
-    return message;
+    return messageId;
   },
 });

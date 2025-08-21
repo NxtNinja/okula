@@ -224,10 +224,27 @@ export const markRead = mutation({
       throw new ConvexError("You are not a memmber of this group");
     }
 
-    const lastMessage = await ctx.db.get(args.messageId);
+    // Skip if already marked as read
+    if (membership.lastSeenMessage === args.messageId) {
+      return;
+    }
+
+    // Only update if the message exists and is newer
+    const newMessage = await ctx.db.get(args.messageId);
+    if (!newMessage) {
+      return;
+    }
+
+    // Check if we need to update (compare timestamps if current lastSeenMessage exists)
+    if (membership.lastSeenMessage) {
+      const currentLastSeen = await ctx.db.get(membership.lastSeenMessage);
+      if (currentLastSeen && currentLastSeen._creationTime >= newMessage._creationTime) {
+        return; // Don't update if the current last seen is newer
+      }
+    }
 
     await ctx.db.patch(membership._id, {
-      lastSeenMessage: lastMessage ? lastMessage._id : undefined,
+      lastSeenMessage: args.messageId,
     });
   },
 });

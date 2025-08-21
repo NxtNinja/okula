@@ -62,27 +62,18 @@ const Body = ({ members }: Props) => {
           msg.message.content.length > 0
         ) {
           try {
-            // Check if content looks encrypted (contains colon separator)
-            const firstContent = msg.message.content[0];
-            if (firstContent && firstContent.includes(":")) {
-              const decryptedContent = decryptXorMessageArray(
-                msg.message.content,
-                encryptionKey
-              );
-              return {
-                ...msg,
-                message: {
-                  ...msg.message,
-                  content: decryptedContent,
-                },
-              };
-            } else {
-              // Message marked as encrypted but doesn't have proper format
-              console.warn(
-                "Message marked as encrypted but has invalid format"
-              );
-              return msg;
-            }
+            // Decrypt the content
+            const decryptedContent = decryptXorMessageArray(
+              msg.message.content,
+              encryptionKey
+            );
+            return {
+              ...msg,
+              message: {
+                ...msg.message,
+                content: decryptedContent,
+              },
+            };
           } catch (error) {
             console.error("Failed to decrypt message:", error);
             // Return original message if decryption fails

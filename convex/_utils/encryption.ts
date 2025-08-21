@@ -3,6 +3,72 @@
  * These functions run in the Convex backend
  */
 
+// Polyfills for Convex runtime
+if (typeof Buffer === 'undefined') {
+  (globalThis as any).Buffer = {
+    from: (data: string, encoding?: string): { toString: (enc: string) => string } => {
+      return {
+        toString: (enc: string) => {
+          if (enc === 'base64') {
+            // Convert binary string to base64
+            return btoa(data);
+          }
+          return data;
+        }
+      };
+    },
+  };
+}
+
+// Base64 polyfill if btoa/atob not available
+if (typeof btoa === 'undefined') {
+  (globalThis as any).btoa = (str: string): string => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let result = '';
+    let i = 0;
+    
+    while (i < str.length) {
+      const a = str.charCodeAt(i++);
+      const b = i < str.length ? str.charCodeAt(i++) : 0;
+      const c = i < str.length ? str.charCodeAt(i++) : 0;
+      
+      const bitmap = (a << 16) | (b << 8) | c;
+      
+      result += chars.charAt((bitmap >> 18) & 63);
+      result += chars.charAt((bitmap >> 12) & 63);
+      result += i - 2 < str.length ? chars.charAt((bitmap >> 6) & 63) : '=';
+      result += i - 1 < str.length ? chars.charAt(bitmap & 63) : '=';
+    }
+    
+    return result;
+  };
+}
+
+if (typeof atob === 'undefined') {
+  (globalThis as any).atob = (str: string): string => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    let result = '';
+    let i = 0;
+    
+    str = str.replace(/=+$/, '');
+    
+    while (i < str.length) {
+      const encoded1 = chars.indexOf(str.charAt(i++));
+      const encoded2 = chars.indexOf(str.charAt(i++));
+      const encoded3 = chars.indexOf(str.charAt(i++));
+      const encoded4 = chars.indexOf(str.charAt(i++));
+      
+      const bitmap = (encoded1 << 18) | (encoded2 << 12) | (encoded3 << 6) | encoded4;
+      
+      result += String.fromCharCode((bitmap >> 16) & 255);
+      if (encoded3 !== 64) result += String.fromCharCode((bitmap >> 8) & 255);
+      if (encoded4 !== 64) result += String.fromCharCode(bitmap & 255);
+    }
+    
+    return result;
+  };
+}
+
 /**
  * Simple hash function for server-side use
  */
@@ -30,28 +96,52 @@ export const generateServerEncryptionKey = (
   return simpleHash(combined);
 };
 
+// Cache for key hashes to avoid recomputation
+const keyHashCache = new Map<string, string>();
+
 /**
- * Manual AES-like encryption (simplified for Convex environment)
- * In production, consider using a proper crypto library or external service
+ * Ultra-fast encryption optimized for real-time messaging
+ * Uses efficient XOR with base64 encoding
  */
-const aesEncrypt = (text: string, key: string): string => {
-  // This is a simplified encryption - in production use proper AES
-  // For now, we'll use a more robust character encoding
-  const keyHash = simpleHash(key);
-  let encrypted = '';
-  
-  for (let i = 0; i < text.length; i++) {
-    const charCode = text.charCodeAt(i);
-    const keyChar = keyHash.charCodeAt(i % keyHash.length);
-    // XOR with key and add position-based salt
-    const encryptedChar = charCode ^ keyChar ^ (i * 13);
-    // Convert to hex for safe storage
-    encrypted += encryptedChar.toString(16).padStart(4, '0');
+const fastEncrypt = (text: string, key: string): string => {
+  try {
+    // Use cached key hash or compute new one
+    let keyHash = keyHashCache.get(key);
+    if (!keyHash) {
+      keyHash = simpleHash(key);
+      // Keep cache size reasonable
+      if (keyHashCache.size > 100) {
+        keyHashCache.clear();
+      }
+      keyHashCache.set(key, keyHash);
+    }
+    
+    const textLength = text.length;
+    const keyLength = keyHash.length;
+    
+    // Pre-allocate Uint8Array for better performance
+    const encrypted = new Uint8Array(textLength);
+    
+    // Optimized XOR operation
+    for (let i = 0; i < textLength; i++) {
+      encrypted[i] = text.charCodeAt(i) ^ keyHash.charCodeAt(i % keyLength);
+    }
+    
+    // Convert Uint8Array to string for base64 encoding
+    let binaryString = '';
+    const chunkSize = 8192; // Process in chunks for better performance
+    
+    for (let i = 0; i < encrypted.length; i += chunkSize) {
+      const chunk = encrypted.slice(i, i + chunkSize);
+      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    
+    // Fast base64 encoding
+    return btoa(binaryString);
+  } catch (error) {
+    console.error('Encryption error:', error);
+    throw new Error('Encryption failed');
   }
-  
-  // Add a simple checksum for integrity
-  const checksum = simpleHash(text + key).substring(0, 8);
-  return checksum + ':' + encrypted;
 };
 
 /**
@@ -59,7 +149,7 @@ const aesEncrypt = (text: string, key: string): string => {
  */
 export const serverEncryptMessage = (message: string, key: string): string => {
   try {
-    return aesEncrypt(message, key);
+    return fastEncrypt(message, key);
   } catch (error) {
     console.error('Server encryption error:', error);
     throw new Error('Failed to encrypt message');
@@ -81,45 +171,63 @@ export const serverHashKey = (key: string): string => {
 };
 
 /**
- * Decrypts a message on the server
+ * Fast decryption for messages
  */
 export const serverDecryptMessage = (encryptedMessage: string, key: string): string => {
   try {
-    // Check if message has the expected format
-    if (!encryptedMessage.includes(':')) {
-      return encryptedMessage; // Not encrypted
+    // Handle empty or null messages
+    if (!encryptedMessage) {
+      return '';
     }
     
-    // Split checksum and encrypted data
-    const parts = encryptedMessage.split(':');
-    if (parts.length !== 2) {
-      throw new Error('Invalid encrypted format');
+    // Check if it's base64 encoded (our fast encryption format)
+    if (encryptedMessage.match(/^[A-Za-z0-9+/]+=*$/)) {
+      try {
+        const keyHash = simpleHash(key);
+        const decoded = atob(encryptedMessage);
+        const decrypted = [];
+        
+        for (let i = 0; i < decoded.length; i++) {
+          const charCode = decoded.charCodeAt(i);
+          const keyChar = keyHash.charCodeAt(i % keyHash.length);
+          decrypted.push(String.fromCharCode(charCode ^ keyChar));
+        }
+        
+        return decrypted.join('');
+      } catch (e) {
+        console.error('Decryption error:', e);
+        return encryptedMessage; // Return as-is if decryption fails
+      }
     }
     
-    const [checksum, encrypted] = parts;
-    const keyHash = simpleHash(key);
-    let decrypted = '';
-    
-    // Decrypt each character
-    for (let i = 0; i < encrypted.length; i += 4) {
-      const hex = encrypted.substring(i, i + 4);
-      const encryptedChar = parseInt(hex, 16);
-      const keyChar = keyHash.charCodeAt((i / 4) % keyHash.length);
-      // Reverse the XOR operation
-      const charCode = encryptedChar ^ keyChar ^ ((i / 4) * 13);
-      decrypted += String.fromCharCode(charCode);
+    // Handle legacy format with checksum
+    if (encryptedMessage.includes(':')) {
+      const parts = encryptedMessage.split(':');
+      if (parts.length === 2) {
+        const [, encrypted] = parts;
+        const keyHash = simpleHash(key);
+        const decrypted = [];
+        
+        // Decrypt hex format
+        for (let i = 0; i < encrypted.length; i += 4) {
+          const hex = encrypted.substring(i, i + 4);
+          const encryptedChar = parseInt(hex, 16);
+          if (!isNaN(encryptedChar)) {
+            const keyChar = keyHash.charCodeAt((i / 4) % keyHash.length);
+            const charCode = encryptedChar ^ keyChar ^ ((i / 4) * 13);
+            decrypted.push(String.fromCharCode(charCode));
+          }
+        }
+        
+        return decrypted.join('');
+      }
     }
     
-    // Verify checksum
-    const expectedChecksum = simpleHash(decrypted + key).substring(0, 8);
-    if (checksum !== expectedChecksum) {
-      console.warn('Checksum mismatch - message may be corrupted');
-    }
-    
-    return decrypted;
+    // Not encrypted, return as-is
+    return encryptedMessage;
   } catch (error) {
     console.error('Server decryption error:', error);
-    return '[Decryption failed]';
+    return encryptedMessage; // Return original on error
   }
 };
 
